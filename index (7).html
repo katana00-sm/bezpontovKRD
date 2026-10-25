@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>БЕЗ ПОНТОВ — барбершоп</title>
+
+<!-- Шрифты (с кириллицей) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;800&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+
+<!-- Tailwind CSS (CDN) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: { paper: '#f8f9fa', ink: '#0a0a0a', red: { pole: '#e11d2e' }, blue: { pole: '#1d4ed8' } },
+      fontFamily: { display: ['Unbounded', 'sans-serif'], body: ['Manrope', 'sans-serif'] }
+    } }
+  }
+</script>
+
+<style>
+  /* ---------- Базовые стили ---------- */
+  html { background: #f8f9fa; }
+  body { color: #0a0a0a; font-family: 'Manrope', sans-serif; overflow-x: hidden; }
+
+  /* Прячем дефолтный курсор только там, где есть мышь */
+  @media (hover: hover) and (pointer: fine) {
+    html, body, a, button, input, select, label { cursor: none !important; }
+  }
+  :focus-visible { outline: 3px solid #1d4ed8; outline-offset: 4px; }
+
+  /* ---------- Фиксированный 3D-фон ---------- */
+  #pole-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; }
+
+  /* ---------- Курсор ---------- */
+  .cursor-dot, .cursor-trail {
+    position: fixed; top: 0; left: 0; z-index: 10000; pointer-events: none;
+    border-radius: 50%; transform: translate(-50%, -50%);
+  }
+  .cursor-dot   { width: 10px; height: 10px; background: #0a0a0a; }
+  .cursor-trail { width: 44px; height: 44px; background: rgba(225,29,46,.18); border: 1px solid rgba(10,10,10,.25); }
+  @media (hover: none), (pointer: coarse) { .cursor-dot, .cursor-trail { display: none; } }
+
+  /* ---------- Preloader ---------- */
+  #preloader { position: fixed; inset: 0; z-index: 9900; background: #f8f9fa; }
+  .tricolor { background: linear-gradient(90deg,#e11d2e 33.3%,#fff 33.3% 66.6%,#1d4ed8 66.6%); }
+
+  /* ---------- Hero ---------- */
+  .hero-title { line-height: .92; letter-spacing: -.03em; }
+  .hero-title .char { display: inline-block; will-change: transform; }
+  .line-mask { overflow: hidden; padding-bottom: .08em; }
+
+  /* ---------- Магнитная кнопка ---------- */
+  .btn-magnetic {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 1.15rem 2.6rem; border-radius: 999px; border: 0;
+    background: #0a0a0a; color: #fff; font-weight: 700; font-size: 1.05rem;
+    position: relative; overflow: hidden; will-change: transform;
+  }
+  .btn-magnetic::before {            /* ИЗМЕНЕНО: синяя заливка при ховере */
+    content: ''; position: absolute; inset: 0; background: #1d4ed8;
+    transform: translateY(101%); transition: transform .45s cubic-bezier(.7,0,.2,1);
+  }
+  .btn-magnetic:hover::before { transform: translateY(0); }
+  .btn-magnetic span { position: relative; z-index: 1; }
+
+  /* ---------- Услуги ---------- */
+  .service-row { border-top: 1px solid rgba(10,10,10,.15); transition: padding .4s ease, color .3s; }
+  .service-row:last-child { border-bottom: 1px solid rgba(10,10,10,.15); }
+  .service-row:hover { padding-left: 1rem; color: #1d4ed8; }
+
+  /* Плавающее превью услуги */
+  #floatImg {
+    position: fixed; top: 0; left: 0; z-index: 9000; pointer-events: none;
+    width: 260px; height: 330px; border-radius: 1rem; overflow: hidden; opacity: 0;
+    background: linear-gradient(135deg,#1d4ed8,#0a0a0a); color: #fff;
+    display: flex; align-items: flex-end; padding: 1rem; font-weight: 700;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,.35);
+  }
+  #floatImg img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #floatImg span { position: relative; z-index: 1; text-shadow: 0 1px 8px rgba(0,0,0,.5); }
+  @media (hover: none), (pointer: coarse) { #floatImg { display: none; } }
+
+  /* ---------- Портфолио ---------- */
+  .work { overflow: hidden; border-radius: 1.25rem; position: relative; background: linear-gradient(135deg,#e5e7eb,#cbd5e1); }
+  .work img { width: 100%; height: 100%; object-fit: cover; transition: transform .9s cubic-bezier(.2,.7,.2,1), filter .6s ease; }
+  .work:hover img { transform: scale(1.12); filter: brightness(.8); }   /* лёгкое увеличение + затемнение */
+  .work::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 6px;
+    background: linear-gradient(90deg,#e11d2e 33%,#fff 33% 66%,#1d4ed8 66%);
+    transform: scaleX(0); transform-origin: left; transition: transform .5s ease;
+  }
+  .work:hover::after { transform: scaleX(1); }
+
+  /* ---------- Модальное окно ---------- */
+  #modal { position: fixed; inset: 0; z-index: 9500; visibility: hidden; }
+  .field {
+    width: 100%; background: transparent; border: 0; border-bottom: 2px solid rgba(10,10,10,.2);
+    padding: .9rem 0; font-size: 1.4rem; font-weight: 500; border-radius: 0; outline: none;
+    transition: border-color .3s;
+  }
+  .field:focus { border-color: #1d4ed8; }
+  select.field { appearance: none; background-image: linear-gradient(45deg,transparent 50%,#0a0a0a 50%),linear-gradient(135deg,#0a0a0a 50%,transparent 50%);
+    background-position: calc(100% - 14px) 55%, calc(100% - 8px) 55%; background-size: 6px 6px; background-repeat: no-repeat; }
+
+  /* Карта: пока не нажали — не перехватывает скролл страницы (важно на телефонах) */
+  #mapFrame { pointer-events: none; }
+  #mapWrap.is-active #mapFrame { pointer-events: auto; }
+  #mapWrap.is-active #mapHint { opacity: 0; visibility: hidden; }
+
+  .field:disabled { opacity: .4; }
+  .btn-magnetic:disabled { opacity: .6; }
+  input[type=date].field { color-scheme: light; }
+  select.field option { font-size: 1rem; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+
+<body>
+  <!-- Фиксированный 3D-фон -->
+  <canvas id="pole-canvas" aria-hidden="true"></canvas>
+
+  <!-- Курсор -->
+  <div class="cursor-trail" id="cursorTrail"></div>
+  <div class="cursor-dot" id="cursorDot"></div>
+
+  <!-- Плавающее фото услуги -->
+  <div id="floatImg" aria-hidden="true"><img alt=""><span></span></div>
+
+  <!-- ===================== PRELOADER ===================== -->
+  <div id="preloader" class="flex flex-col justify-between p-6 md:p-12">
+    <span class="font-display font-extrabold text-lg">БЕЗ ПОНТОВ</span>
+    <div class="font-display font-extrabold leading-none tabular-nums text-[28vw] md:text-[18vw]" aria-live="off">
+      <span id="loadNum">0</span><span class="text-red-pole">%</span>
+    </div>
+    <div class="h-2 bg-black/10 rounded-full overflow-hidden">
+      <div id="loadBar" class="tricolor h-full w-full origin-left" style="transform:scaleX(0)"></div>
+    </div>
+  </div>
+
+  <!-- Навигация -->
+  <header class="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-6 md:px-12 py-6">
+    <a href="#hero" class="font-display font-extrabold text-lg">БЕЗ ПОНТОВ</a>
+    <nav class="hidden md:flex gap-8 text-sm font-bold">
+      <a href="#services" class="hover:text-blue-pole transition">Услуги</a>
+      <a href="#works" class="hover:text-blue-pole transition">Работы</a>
+      <a href="#reviews" class="hover:text-blue-pole transition">Отзывы</a>
+      <a href="#contacts" class="hover:text-blue-pole transition">Контакты</a>
+      <a href="#book" data-open-modal class="hover:text-red-pole transition">Запись</a>
+    </nav>
+  </header>
+
+  <!-- ===================== HERO ===================== -->
+  <section id="hero" class="relative h-screen min-h-[640px]">
+    <div class="h-full flex flex-col justify-center px-6 md:px-12 pointer-events-none">
+      <h1 class="hero-title font-display font-extrabold text-[17vw] md:text-[11vw]" aria-label="Без понтов">
+        <div class="line-mask" data-line>БЕЗ</div>
+        <div class="line-mask" data-line>ПОНТОВ</div>
+      </h1>
+      <p class="hero-sub mt-8 max-w-md text-lg md:text-xl font-medium opacity-0">
+        Стрижка, борода, бритьё. Приходите, садитесь, выходите довольным.
+      </p>
+      <div class="hero-cta mt-10 pointer-events-auto opacity-0">
+        <button type="button" data-open-modal class="btn-magnetic magnetic"><span>Записаться</span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== УСЛУГИ ===================== -->
+  <section id="services" class="px-6 md:px-12 py-32 max-w-5xl mx-auto">
+    <h2 class="font-display font-extrabold text-4xl md:text-6xl tracking-tight mb-16">Услуги и цены</h2>
+    <!-- data-img: фото услуги (положите файлы рядом с index.html) -->
+    <ul id="serviceList">
+      <li class="service-row flex items-baseline justify-between gap-6 py-7" data-img="service1.jpg" data-label="Мужская стрижка">
+        <div><h3 class="text-xl md:text-2xl font-bold">Мужская стрижка</h3><p class="opacity-60 mt-1">Машинка и ножницы, мытьё головы, укладка</p></div>
+        <span class="font-display text-xl md:text-2xl whitespace-nowrap">2 500 ₽</span>
+      </li>
+      <li class="service-row flex items-baseline justify-between gap-6 py-7" data-img="service2.jpg" data-label="Моделирование бороды">
+        <div><h3 class="text-xl md:text-2xl font-bold">Моделирование бороды</h3><p class="opacity-60 mt-1">Форма, контур, уход маслом</p></div>
+        <span class="font-display text-xl md:text-2xl whitespace-nowrap">1 800 ₽</span>
+      </li>
+      <li class="service-row flex items-baseline justify-between gap-6 py-7" data-img="service3.jpg" data-label="Опасное бритьё">
+        <div><h3 class="text-xl md:text-2xl font-bold">Опасное бритьё</h3><p class="opacity-60 mt-1">Горячее полотенце, классический станок</p></div>
+        <span class="font-display text-xl md:text-2xl whitespace-nowrap">2 000 ₽</span>
+      </li>
+      <li class="service-row flex items-baseline justify-between gap-6 py-7" data-img="service4.jpg" data-label="Стрижка + борода">
+        <div><h3 class="text-xl md:text-2xl font-bold">Стрижка + борода</h3><p class="opacity-60 mt-1">Полный комплект за один визит</p></div>
+        <span class="font-display text-xl md:text-2xl whitespace-nowrap">4 000 ₽</span>
+      </li>
+      <li class="service-row flex items-baseline justify-between gap-6 py-7" data-img="service5.jpg" data-label="Детская стрижка">
+        <div><h3 class="text-xl md:text-2xl font-bold">Детская стрижка</h3><p class="opacity-60 mt-1">До 12 лет</p></div>
+        <span class="font-display text-xl md:text-2xl whitespace-nowrap">1 800 ₽</span>
+      </li>
+      <li class="service-row flex items-baseline justify-between gap-6 py-7" data-img="service6.jpg" data-label="Завивка волос">
+        <div><h3 class="text-xl md:text-2xl font-bold">Завивка волос</h3><p class="opacity-60 mt-1">Долгая процедура, только вечерняя запись</p></div>
+        <span class="font-display text-xl md:text-2xl whitespace-nowrap">3 500 ₽</span>
+      </li>
+    </ul>
+  </section>
+
+  <!-- ===================== ПОРТФОЛИО (галерея) ===================== -->
+  <section id="works" class="px-6 md:px-12 pb-32 max-w-6xl mx-auto">
+    <h2 class="font-display font-extrabold text-4xl md:text-6xl tracking-tight mb-16">Наши работы</h2>
+    <!-- Фото берутся с Unsplash; если ссылка не открылась — подставится локальный photoN.jpg -->
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+      <figure class="work aspect-[4/5]"><img src="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=800&q=80" data-fb="photo1.jpg" alt="Мужская стрижка в барбершопе" loading="lazy"
+        onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb')}else{this.style.opacity=0}"></figure>
+      <figure class="work aspect-[4/5]"><img src="https://images.unsplash.com/photo-1585747860715-2ba37e788b70?auto=format&fit=crop&w=800&q=80" data-fb="photo2.jpg" alt="Барбер работает с бородой клиента" loading="lazy"
+        onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb')}else{this.style.opacity=0}"></figure>
+      <figure class="work aspect-[4/5]"><img src="https://images.unsplash.com/photo-1621605815971-fbc98d665033?auto=format&fit=crop&w=800&q=80" data-fb="photo3.jpg" alt="Оформление бороды опасной бритвой" loading="lazy"
+        onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb')}else{this.style.opacity=0}"></figure>
+      <figure class="work aspect-[4/5]"><img src="https://images.unsplash.com/photo-1599351431202-1e0f0137899a?auto=format&fit=crop&w=800&q=80" data-fb="photo4.jpg" alt="Классическая стрижка ножницами" loading="lazy"
+        onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb')}else{this.style.opacity=0}"></figure>
+      <figure class="work aspect-[4/5]"><img src="https://images.unsplash.com/photo-1605497788044-5a32c7078486?auto=format&fit=crop&w=800&q=80" data-fb="photo5.jpg" alt="Фейд и укладка" loading="lazy"
+        onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb')}else{this.style.opacity=0}"></figure>
+      <figure class="work aspect-[4/5]"><img src="https://images.unsplash.com/photo-1622286342621-4bd786c2447c?auto=format&fit=crop&w=800&q=80" data-fb="photo6.jpg" alt="Готовая стрижка с бородой" loading="lazy"
+        onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.removeAttribute('data-fb')}else{this.style.opacity=0}"></figure>
+    </div>
+  </section>
+
+  <!-- ===================== ОТЗЫВЫ ===================== -->
+  <section id="reviews" class="px-6 md:px-12 pb-32 max-w-6xl mx-auto">
+    <!-- Спрайт звезды: один раз, дальше через <use> -->
+    <svg width="0" height="0" class="absolute" aria-hidden="true"><symbol id="star" viewBox="0 0 20 20"><path d="M10 1.5l2.5 5.3 5.8.8-4.2 4.1 1 5.8L10 14.6l-5.1 2.9 1-5.8L1.7 7.6l5.8-.8z"/></symbol></svg>
+    <h2 class="font-display font-extrabold text-4xl md:text-6xl tracking-tight mb-16">Что говорят клиенты</h2>
+    <div class="grid md:grid-cols-3 gap-6">
+      <article class="review-card flex flex-col justify-between border border-ink/15 bg-white/75 backdrop-blur-sm rounded-2xl p-8 transition-colors duration-300 hover:border-blue-pole">
+        <div>
+          <div class="flex gap-1 text-red-pole mb-6" role="img" aria-label="Оценка 5 из 5"><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg></div>
+          <p class="text-lg leading-relaxed">Пришёл впервые, ушёл с тем, что хотел. Алина сделала стрижку ровно по моему фото, и всё заняло около часа. Теперь хожу только к ней.</p>
+        </div>
+        <footer class="mt-8"><p class="font-bold">Дмитрий К.</p><p class="text-sm opacity-60">Мужская стрижка</p></footer>
+      </article>
+      <article class="review-card flex flex-col justify-between border border-ink/15 bg-white/75 backdrop-blur-sm rounded-2xl p-8 transition-colors duration-300 hover:border-blue-pole">
+        <div>
+          <div class="flex gap-1 text-red-pole mb-6" role="img" aria-label="Оценка 5 из 5"><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg></div>
+          <p class="text-lg leading-relaxed">Быстро и без лишних разговоров. Алина сделала фейд аккуратнее, чем у барберов, к которым я ходил раньше. Держится больше трёх недель.</p>
+        </div>
+        <footer class="mt-8"><p class="font-bold">Максим Л.</p><p class="text-sm opacity-60">Стрижка и укладка</p></footer>
+      </article>
+      <article class="review-card flex flex-col justify-between border border-ink/15 bg-white/75 backdrop-blur-sm rounded-2xl p-8 transition-colors duration-300 hover:border-blue-pole">
+        <div>
+          <div class="flex gap-1 text-red-pole mb-6" role="img" aria-label="Оценка 5 из 5"><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg><svg class="w-5 h-5 fill-current" aria-hidden="true"><use href="#star"/></svg></div>
+          <p class="text-lg leading-relaxed">Понравилась атмосфера: кофе, нормальная музыка, никто не навязывает допуслуги. Алина подсказала, как ухаживать за бородой, и это работает до сих пор.</p>
+        </div>
+        <footer class="mt-8"><p class="font-bold">Артём С.</p><p class="text-sm opacity-60">Моделирование бороды</p></footer>
+      </article>
+    </div>
+  </section>
+
+  <!-- ===================== КАК НАС НАЙТИ ===================== -->
+  <section id="contacts" class="px-6 md:px-12 pb-32 max-w-6xl mx-auto">
+    <h2 class="font-display font-extrabold text-4xl md:text-6xl tracking-tight mb-16">Как нас найти</h2>
+    <div class="grid md:grid-cols-5 gap-8 md:gap-12 items-stretch">
+      <div class="md:col-span-2 flex flex-col justify-between gap-10">
+        <div class="space-y-6">
+          <div><p class="text-sm font-bold opacity-60">Адрес</p><p class="font-display font-extrabold text-2xl">Краснодар, ул. имени Б.С. Кудухова, 1к1</p></div>
+          <div><p class="text-sm font-bold opacity-60">Часы работы</p><p class="text-xl font-bold">Ежедневно с 10:00 до 21:00</p></div>
+          <div><p class="text-sm font-bold opacity-60">Телефон</p>
+            <a href="tel:+79180222068" class="text-xl font-bold hover:text-blue-pole transition-colors">+7 (918) 022-20-68</a></div>
+        </div>
+        <!-- Маршрут в Яндекс Картах / Навигаторе — в новой вкладке -->
+        <a href="https://yandex.ru/maps/?rtext=~45.094510,38.911317" target="_blank" rel="noopener noreferrer"
+           class="btn-magnetic magnetic self-start"><span>Построить маршрут</span></a>
+      </div>
+
+      <!-- Карта: высота задаётся обёрткой, iframe занимает 100% -->
+      <div id="mapWrap" class="md:col-span-3 relative w-full h-[320px] sm:h-[400px] md:h-[480px] overflow-hidden rounded-2xl bg-slate-200">
+        <iframe id="mapFrame" title="Карта: Краснодар, ул. имени Б.С. Кудухова, 1к1"
+          src="https://yandex.ru/map-widget/v1/?ll=38.911317%2C45.094510&z=16&pt=38.911317%2C45.094510,pm2rdm"
+          width="100%" height="100%" frameborder="0" allowfullscreen="true" loading="lazy"
+          class="rounded-lg shadow-lg block w-full h-full" style="position:relative;"></iframe>
+        <button type="button" id="mapHint" class="absolute inset-0 w-full h-full flex items-end justify-center pb-5 transition-opacity duration-300" aria-label="Включить управление картой">
+          <span class="bg-ink text-white text-sm font-bold rounded-full px-5 py-2">Нажмите, чтобы двигать карту</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CTA / ФУТЕР ===================== -->
+  <section id="book" class="px-6 md:px-12 py-32 text-center border-t border-black/10 bg-paper/80 backdrop-blur-sm">
+    <h2 class="font-display font-extrabold text-4xl md:text-7xl tracking-tight mb-6">Ваше кресло свободно</h2>
+    <p class="text-lg opacity-60 mb-12">Ежедневно с 10:00 до 21:00.</p>
+    <button type="button" data-open-modal class="btn-magnetic magnetic"><span>Записаться</span></button>
+    <p class="mt-24 text-sm opacity-50">© 2026 Без Понтов. Барбершоп.</p>
+  </section>
+
+  <!-- ===================== МОДАЛЬНОЕ ОКНО ===================== -->
+  <div id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="absolute inset-0 bg-paper/95 backdrop-blur-xl" data-panel></div>
+    <div class="tricolor absolute left-0 top-0 bottom-0 w-2 md:w-3" data-panel-bar></div>
+
+    <button type="button" id="modalClose" aria-label="Закрыть"
+      class="magnetic z-20 absolute top-5 right-5 md:top-10 md:right-12 w-14 h-14 rounded-full border-2 border-ink flex items-center justify-center text-2xl hover:bg-ink hover:text-white transition-colors">✕</button>
+
+    <div class="relative h-full overflow-y-auto flex items-center">
+      <div class="w-full max-w-3xl mx-auto px-8 md:px-12 py-24">
+        <h2 id="modalTitle" class="m-item font-display font-extrabold text-4xl md:text-6xl tracking-tight mb-12">Запишитесь на стрижку</h2>
+        <form id="bookForm" class="space-y-8" novalidate>
+          <label class="m-item block"><span class="text-sm font-bold opacity-60">Имя</span>
+            <input class="field" name="name" type="text" autocomplete="name" required placeholder="Как вас зовут"></label>
+          <label class="m-item block"><span class="text-sm font-bold opacity-60">Телефон</span>
+            <input class="field" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="18" required placeholder="+7 (___) ___-__-__"></label>
+
+          <label class="m-item block"><span class="text-sm font-bold opacity-60">Услуга</span>
+            <select class="field" name="service" required>
+              <option value="" data-price="" data-duration="" data-type="">Выберите услугу</option>
+              <option value="Мужская стрижка"      data-price="2500" data-duration="60"  data-type="standard">Мужская стрижка</option>
+              <option value="Моделирование бороды" data-price="1800" data-duration="45"  data-type="standard">Моделирование бороды</option>
+              <option value="Опасное бритьё"       data-price="2000" data-duration="45"  data-type="standard">Опасное бритьё</option>
+              <option value="Стрижка + борода"     data-price="4000" data-duration="105" data-type="standard">Стрижка + борода</option>
+              <option value="Детская стрижка"      data-price="1800" data-duration="45"  data-type="standard">Детская стрижка</option>
+              <option value="Завивка волос"        data-price="3500" data-duration="120" data-type="evening">Завивка волос</option>
+            </select></label>
+
+          <!-- Инфо об услуге: скрыто, пока услуга не выбрана -->
+          <div id="serviceInfo" class="hidden border-l-4 border-blue-pole pl-5 py-1" aria-live="polite">
+            <div class="flex flex-wrap gap-x-12 gap-y-2">
+              <div><span class="block text-sm font-bold opacity-60">Стоимость</span><span id="infoPrice" class="font-display font-extrabold text-2xl md:text-3xl"></span></div>
+              <div><span class="block text-sm font-bold opacity-60">Длительность</span><span id="infoDuration" class="font-display font-extrabold text-2xl md:text-3xl"></span></div>
+            </div>
+            <p id="infoNote" class="hidden mt-3 text-sm font-bold text-red-pole"></p>
+          </div>
+
+          <div class="grid md:grid-cols-2 gap-8">
+            <label class="m-item block"><span class="text-sm font-bold opacity-60">Дата</span>
+              <input class="field" name="date" type="date" required></label>
+            <label class="m-item block"><span class="text-sm font-bold opacity-60">Время</span>
+              <select class="field" name="time" required disabled></select></label>
+          </div>
+
+          <!-- Доп. поля для сервера (заполняются скриптом) -->
+          <input type="hidden" name="price">
+          <input type="hidden" name="duration">
+
+          <p id="formError" class="hidden text-red-pole font-bold" role="alert"></p>
+
+          <div class="m-item pt-4"><button type="submit" class="btn-magnetic magnetic"><span>Отправить заявку</span></button></div>
+        </form>
+
+        <!-- Экран успеха (показывается после успешной отправки) -->
+        <div id="successScreen" class="hidden text-center" role="status" aria-live="polite">
+          <svg id="sIcon" viewBox="0 0 100 100" class="w-28 h-28 mx-auto mb-8" fill="none" stroke="#16a34a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="50" cy="50" r="44" fill="#16a34a" fill-opacity=".1" stroke="none"/>
+            <circle id="sCircle" cx="50" cy="50" r="44" pathLength="1" style="stroke-dasharray:1"/>
+            <path id="sCheck" d="M30 52 L44 66 L71 36" pathLength="1" style="stroke-dasharray:1"/>
+          </svg>
+          <h2 class="font-display font-extrabold text-3xl md:text-5xl tracking-tight mb-4">Спасибо, заявка отправлена!</h2>
+          <p id="successSummary" class="text-lg md:text-xl font-bold mb-2"></p>
+          <p class="text-lg opacity-60">Мы позвоним, чтобы подтвердить запись.</p>
+          <button type="button" id="successClose" class="btn-magnetic magnetic mt-10"><span>Закрыть</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Библиотеки -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script>
+  gsap.registerPlugin(ScrollTrigger);
+  const isTouch = matchMedia('(hover: none), (pointer: coarse)').matches;
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ============================================================
+     УТИЛИТА: блокировка скролла (счётчик — несколько причин блокировки)
+     ============================================================ */
+  const ScrollLock = (() => {
+    let locks = 0;
+    return {
+      on()  { if (locks++ === 0) document.documentElement.style.overflow = 'hidden'; },
+      off() { if (--locks <= 0) { locks = 0; document.documentElement.style.overflow = ''; } }
+    };
+  })();
+
+  /* ============================================================
+     МОДУЛЬ: Cursor — кастомный курсор со следом
+     ============================================================ */
+  const Cursor = (() => {
+    if (isTouch) return;
+    const dot = document.getElementById('cursorDot');
+    const trail = document.getElementById('cursorTrail');
+    const dx = gsap.quickTo(dot,   'x', { duration: .08, ease: 'power3' });
+    const dy = gsap.quickTo(dot,   'y', { duration: .08, ease: 'power3' });
+    const tx = gsap.quickTo(trail, 'x', { duration: .55, ease: 'power3' });
+    const ty = gsap.quickTo(trail, 'y', { duration: .55, ease: 'power3' });
+    window.addEventListener('mousemove', e => { dx(e.clientX); dy(e.clientY); tx(e.clientX); ty(e.clientY); });
+
+    // Делегирование: работает и для элементов внутри модалки
+    document.addEventListener('mouseover', e => {
+      const hot = e.target.closest('a, button, input, select, label, .service-row');
+      gsap.to(trail, { scale: hot ? 1.8 : 1, duration: .3 });
+    });
+  })();
+
+  /* ============================================================
+     МОДУЛЬ: Hero — анимация заголовка (запускается после Preloader)
+     ============================================================ */
+  const Hero = (() => {
+    document.querySelectorAll('[data-line]').forEach(line => {
+      line.innerHTML = [...line.textContent.trim()].map(c => `<span class="char">${c}</span>`).join('');
+    });
+    // Прячем до окончания прелоадера
+    gsap.set('.hero-title .char', { yPercent: 110, rotate: 8 });
+    gsap.set(['.hero-sub', '.hero-cta'], { y: 24 });
+
+    return {
+      play() {
+        gsap.timeline()
+          .to('.hero-title .char', { yPercent: 0, rotate: 0, duration: 1.1, ease: 'expo.out', stagger: .06 })
+          .to('.hero-sub', { opacity: 1, y: 0, duration: .8, ease: 'power3.out' }, '-=.5')
+          .to('.hero-cta', { opacity: 1, y: 0, duration: .8, ease: 'power3.out' }, '-=.6');
+      }
+    };
+  })();
+
+  /* ============================================================
+     МОДУЛЬ: ThreeJS — фиксированный барберский шест
+     Вращение = автоспин + позиция скролла + буст от скорости скролла
+     ============================================================ */
+  const ThreeJS = (() => {
+    const canvas = document.getElementById('pole-canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(32, 1, .1, 100);
+    camera.position.set(0, 0, 14);
+    scene.add(new THREE.AmbientLight(0xffffff, .6));
+    const key = new THREE.DirectionalLight(0xffffff, 1.1);
+    key.position.set(-4, 5, 8);
+    scene.add(key);
+
+    // --- Шейдер полос ---
+    const uniforms = { uTime: { value: 0 } };
+    const stripeMat = new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader: `
+        varying vec2 vUv; varying vec3 vNormal;
+        void main() {
+          vUv = uv; vNormal = normalize(normalMatrix * normal);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: `
+        varying vec2 vUv; varying vec3 vNormal; uniform float uTime;
+        void main() {
+          float phase = vUv.x * 3.0 + vUv.y * 5.0 - uTime * 0.25;
+          float f = fract(phase) * 4.0;
+          vec3 red = vec3(0.88,0.11,0.18), white = vec3(0.97,0.97,0.98), blue = vec3(0.11,0.30,0.85);
+          float w = fwidth(f) * 1.2 + 0.02;
+          vec3 col = white;
+          col = mix(col, red,  smoothstep(0.0, w, f)       * (1.0 - smoothstep(1.0, 1.0 + w, f)));
+          col = mix(col, blue, smoothstep(2.0, 2.0 + w, f) * (1.0 - smoothstep(3.0, 3.0 + w, f)));
+          vec3 N = normalize(vNormal), L = normalize(vec3(-0.5,0.6,0.8));
+          float diff = 0.55 + 0.45 * max(dot(N, L), 0.0);
+          float spec = pow(max(dot(reflect(-L, N), vec3(0.0,0.0,1.0)), 0.0), 40.0) * 0.5;
+          float rim  = pow(1.0 - max(N.z, 0.0), 2.5) * 0.25;
+          gl_FragColor = vec4(col * diff - rim + spec, 1.0);
+        }`,
+      extensions: { derivatives: true }
+    });
+    const capMat = new THREE.MeshPhongMaterial({ color: 0x0a0a0a, shininess: 90, specular: 0x666666 });
+
+    // --- Модель: rig (параллакс) > pole (наклон) > spinner (вращение по Y) ---
+    const H = 6, R = .9;
+    const spinner = new THREE.Group();
+    spinner.add(new THREE.Mesh(new THREE.CylinderGeometry(R, R, H, 64, 1, true), stripeMat));
+    [1, -1].forEach(s => {
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(R * 1.12, 48, 32), capMat);
+      dome.scale.y = .6; dome.position.y = s * (H / 2 + .12);
+      const ring = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.12, R * 1.12, .35, 48), capMat);
+      ring.position.y = s * (H / 2 + .02);
+      spinner.add(dome, ring);
+    });
+    const pole = new THREE.Group(); pole.add(spinner); pole.rotation.z = .12;
+    const rig = new THREE.Group();  rig.add(pole); scene.add(rig);
+    rig.scale.setScalar(.001);                  // скрыт до intro()
+
+    // --- Параллакс от мыши ---
+    const rx = gsap.quickTo(rig.rotation, 'x', { duration: 1.2, ease: 'power3' });
+    const ry = gsap.quickTo(rig.rotation, 'y', { duration: 1.2, ease: 'power3' });
+    const px = gsap.quickTo(rig.position, 'x', { duration: 1.2, ease: 'power3' });
+    let baseX = 0, baseScale = 1;
+    window.addEventListener('mousemove', e => {
+      const nx = e.clientX / innerWidth - .5, ny = e.clientY / innerHeight - .5;
+      ry(nx * .9); rx(ny * .35); px(baseX + nx * .5);
+    });
+
+    // --- Реакция на скролл (через ScrollTrigger) ---
+    let scrollPos = 0, scrollVel = 0, lastScrollEvt = 0, boost = 0;
+    ScrollTrigger.create({
+      start: 0, end: 'max',
+      onUpdate: self => {
+        scrollPos = self.scroll();               // позиция
+        scrollVel = self.getVelocity();          // скорость, px/s (знак = направление)
+        lastScrollEvt = performance.now();
+      }
+    });
+
+    // Затухание фона после Hero, чтобы не мешал читать текст
+    const isNarrow = () => innerWidth / innerHeight <= 1.1;
+    gsap.fromTo(canvas,
+      { opacity: () => isNarrow() ? .4 : 1 },
+      { opacity: () => isNarrow() ? .12 : .28, ease: 'none', immediateRender: true,
+        scrollTrigger: { trigger: '#hero', start: 'top top', end: 'bottom top', scrub: true, invalidateOnRefresh: true } });
+
+    function resize() {
+      renderer.setSize(innerWidth, innerHeight, false);
+      camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+      const wide = !isNarrow();
+      baseX = wide ? 3.4 : 0;
+      baseScale = wide ? 1 : .8;
+      rig.position.x = baseX;
+      if (introDone) rig.scale.setScalar(baseScale);
+    }
+    let introDone = false;
+    window.addEventListener('resize', resize); resize();
+
+    // --- Цикл рендера: НЕ зависит от того, какая секция на экране ---
+    const clock = new THREE.Clock();
+    let autoSpin = 0;
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(clock.getDelta(), .05);
+      // Если скролл остановился (>120мс без событий) — целевая скорость 0
+      const fresh = performance.now() - lastScrollEvt < 120;
+      const target = fresh ? gsap.utils.clamp(-14, 14, scrollVel / 180) : 0;
+      boost += (target - boost) * .08;           // плавное сглаживание
+
+      autoSpin += dt * (reduceMotion ? 0 : .5 + boost);  // вниз — быстрее, вверх — назад
+      spinner.rotation.y = autoSpin + scrollPos * .002;  // + позиция скролла
+      uniforms.uTime.value = reduceMotion ? 0 : clock.elapsedTime;
+      renderer.render(scene, camera);
+    });
+
+    return {
+      intro() {
+        gsap.to(rig.scale, { x: baseScale, y: baseScale, z: baseScale, duration: 1.8, ease: 'expo.out',
+          onComplete: () => introDone = true });
+        gsap.from(pole.rotation, { y: -Math.PI, duration: 2, ease: 'expo.out' });
+      }
+    };
+  })();
+
+  /* ============================================================
+     МОДУЛЬ: Preloader — счётчик 0–100%, затем растворение
+     ============================================================ */
+  const Preloader = (() => {
+    const el = document.getElementById('preloader');
+    const num = document.getElementById('loadNum');
+    const bar = document.getElementById('loadBar');
+    const state = { v: 0 };
+    ScrollLock.on();
+    window.scrollTo(0, 0);
+
+    // Реальная готовность: окно + шрифты
+    const ready = Promise.all([
+      new Promise(r => document.readyState === 'complete' ? r() : addEventListener('load', r)),
+      document.fonts ? document.fonts.ready : Promise.resolve()
+    ]);
+
+    function finish() {
+      gsap.timeline({ onComplete: () => { el.style.display = 'none'; ScrollLock.off(); ScrollTrigger.refresh(); } })
+        .to('#loadNum, #loadNum + span', { yPercent: -30, opacity: 0, duration: .5, ease: 'power2.in' })
+        .to(el, { opacity: 0, filter: 'blur(14px)', duration: .9, ease: 'power2.inOut' }, '-=.1')
+        .add(() => { Hero.play(); ThreeJS.intro(); }, '-=.5');   // запуск Hero и 3D
+    }
+
+    // Счёт до 100: минимум ~2.2с для красоты; на 90% ждём реальную загрузку
+    gsap.timeline()
+      .to(state, { v: 90, duration: 1.8, ease: 'power2.out',
+        onUpdate: () => { num.textContent = Math.round(state.v); bar.style.transform = `scaleX(${state.v / 100})`; } })
+      .add(() => ready.then(() => {
+        gsap.to(state, { v: 100, duration: .5, ease: 'power1.inOut',
+          onUpdate: () => { num.textContent = Math.round(state.v); bar.style.transform = `scaleX(${state.v / 100})`; },
+          onComplete: () => gsap.delayedCall(.2, finish) });
+      }));
+  })();
+
+  /* ============================================================
+     МОДУЛЬ: Services — появление строк (skewY) + Floating Image
+     ============================================================ */
+  const Services = (() => {
+    gsap.from('#services h2', { y: 50, opacity: 0, duration: 1, ease: 'power3.out',
+      scrollTrigger: { trigger: '#services h2', start: 'top 85%' } });
+
+    gsap.utils.toArray('.service-row').forEach(row => {
+      gsap.fromTo(row, { y: 80, skewY: 5, opacity: 0 },
+        { y: 0, skewY: 0, opacity: 1, duration: 1, ease: 'power3.out',
+          scrollTrigger: { trigger: row, start: 'top 90%', toggleActions: 'play none none reverse' } });
+    });
+
+    // --- Floating Image Reveal (только десктоп) ---
+    if (isTouch) return;
+    const list = document.getElementById('serviceList');
+    const box = document.getElementById('floatImg');
+    const img = box.querySelector('img');
+    const label = box.querySelector('span');
+    const W = 260, H = 330, GAP = 36;
+    const fx = gsap.quickTo(box, 'x', { duration: .6, ease: 'power3' });
+    const fy = gsap.quickTo(box, 'y', { duration: .6, ease: 'power3' });
+    gsap.set(box, { scale: .85, rotate: -4 });
+
+    const place = e => {
+      // Если справа нет места — показываем слева от курсора
+      const x = e.clientX + GAP + W > innerWidth ? e.clientX - GAP - W : e.clientX + GAP;
+      fx(x); fy(e.clientY - H / 2);
+    };
+    list.addEventListener('mousemove', place);
+
+    list.querySelectorAll('.service-row').forEach(row => {
+      row.addEventListener('mouseenter', e => {
+        img.style.display = '';
+        img.onerror = () => img.style.display = 'none';   // нет файла — остаётся градиент
+        img.src = row.dataset.img;
+        label.textContent = row.dataset.label;
+        if (gsap.getProperty(box, 'opacity') < .05) {      // первое появление — без «пролёта» из угла
+          const x = e.clientX + GAP + W > innerWidth ? e.clientX - GAP - W : e.clientX + GAP;
+          gsap.set(box, { x, y: e.clientY - H / 2 });
+        }
+        gsap.to(box, { opacity: 1, scale: 1, rotate: 0, duration: .5, ease: 'power3.out', overwrite: 'auto' });
+      });
+      row.addEventListener('mouseleave', () => {
+        gsap.to(box, { opacity: 0, scale: .85, rotate: -4, duration: .35, ease: 'power2.in', overwrite: 'auto' });
+      });
+    });
+  })();
+
+  /* ============================================================
+     МОДУЛЬ: Works — открытие фото при скролле
+     ============================================================ */
+  const Works = (() => {
+    gsap.utils.toArray('.work').forEach(fig => {
+      gsap.from(fig, { clipPath: 'inset(100% 0% 0% 0%)', duration: 1.2, ease: 'expo.out',
+        scrollTrigger: { trigger: fig, start: 'top 88%' } });
+    });
+    gsap.from('#works h2', { y: 50, opacity: 0, duration: 1, ease: 'power3.out',
+      scrollTrigger: { trigger: '#works h2', start: 'top 85%' } });
+  })();
+
+  /* ============================================================
+     МОДУЛЬ: Trust — анимации отзывов/карты и управление картой
+     ============================================================ */
+  const Trust = (() => {
+    ['#reviews h2', '#contacts h2'].forEach(sel => {
+      gsap.from(sel, { y: 50, opacity: 0, duration: 1, ease: 'power3.out',
+        scrollTrigger: { trigger: sel, start: 'top 85%' } });
+    });
+    gsap.from('.review-card', { y: 60, skewY: 3, opacity: 0, duration: 1, ease: 'power3.out', stagger: .12,
+      scrollTrigger: { trigger: '#reviews .grid', start: 'top 85%' } });
+    gsap.from('#mapWrap', { clipPath: 'inset(0% 0% 100% 0%)', duration: 1.2, ease: 'expo.out',
+      scrollTrigger: { trigger: '#mapWrap', start: 'top 88%' } });
+
+    // Карта не перехватывает скролл, пока по ней не нажали
+    const wrap = document.getElementById('mapWrap');
+    const hint = document.getElementById('mapHint');
+    const cursorEls = document.querySelectorAll('.cursor-dot, .cursor-trail');
+    const setActive = on => {
+      wrap.classList.toggle('is-active', on);
+      cursorEls.forEach(el => el.style.opacity = on ? 0 : '');   // кастомный курсор прячем над картой
+    };
+    hint.addEventListener('click', () => setActive(true));
+    wrap.addEventListener('mouseleave', () => setActive(false));                       // десктоп
+    document.addEventListener('touchstart', e => { if (!wrap.contains(e.target)) setActive(false); }, { passive: true });  // телефон
+  })();
+
+  /* ============================================================
+     МОДУЛЬ: Modal — полноэкранная запись
+     Выезд панели справа (clipPath) + blur-проявление, stagger полей
+     ============================================================ */
+  const Modal = (() => {
+    const modal    = document.getElementById('modal');
+    const panel    = modal.querySelector('[data-panel]');
+    const bar      = modal.querySelector('[data-panel-bar]');
+    const items    = modal.querySelectorAll('.m-item');
+    const closeBtn = document.getElementById('modalClose');
+    const form     = document.getElementById('bookForm');
+    const content  = modal.querySelector('.overflow-y-auto');   // весь контент модалки
+    const infoBox  = document.getElementById('serviceInfo');
+    const success  = document.getElementById('successScreen');
+    const summary  = document.getElementById('successSummary');
+    const errorEl  = document.getElementById('formError');
+    const submitBtn   = form.querySelector('button[type="submit"]');
+    const submitLabel = submitBtn.querySelector('span');
+    const SUBMIT_TEXT = submitLabel.textContent;
+    let isOpen = false, autoCloseCall = null;
+
+    const lockScroll   = () => { document.documentElement.style.overflow = 'hidden'; document.body.style.overflow = 'hidden'; };
+    const unlockScroll = () => { document.documentElement.style.overflow = ''; document.body.style.overflow = ''; };
+
+    /* ---------- Анти-спам кнопки ---------- */
+    function setSending(on) {
+      form.dataset.sending = on ? '1' : '0';
+      submitBtn.disabled = on;
+      submitLabel.textContent = on ? 'Отправка...' : SUBMIT_TEXT;
+    }
+
+    /* ---------- Ошибка отправки (вместо alert) ---------- */
+    function showError(msg) {
+      if (!isOpen) return;
+      errorEl.textContent = msg;
+      errorEl.classList.remove('hidden');
+      gsap.fromTo(errorEl, { y: -6, opacity: 0 }, { y: 0, opacity: 1, duration: .4, ease: 'power3.out' });
+    }
+    function hideError() { errorEl.classList.add('hidden'); }
+
+    /* ---------- Экран успеха: форма уходит, появляется галочка ---------- */
+    function showSuccess() {
+      if (!isOpen) return;
+      const f = form.elements;
+      const d = new Date(f.date.value + 'T00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+      summary.textContent = `${f.service.value}, ${d} в ${f.time.value}`;
+
+      gsap.to(form, { opacity: 0, y: -20, duration: .4, ease: 'power2.in', onComplete: () => {
+        form.classList.add('hidden');
+        success.classList.remove('hidden');
+        gsap.timeline()
+          .fromTo(success, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: .6, ease: 'power3.out' })
+          .fromTo('#sIcon',   { scale: .6 }, { scale: 1, duration: .7, ease: 'back.out(2)' }, 0)
+          .fromTo('#sCircle', { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: .7, ease: 'power2.out' }, .1)
+          .fromTo('#sCheck',  { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: .45, ease: 'power2.out' }, '-=.15');
+        autoCloseCall = gsap.delayedCall(4.5, close);   // автозакрытие
+      }});
+    }
+
+    /* ---------- Мгновенный сброс в начале close() ---------- */
+    function resetForm() {
+      form.reset();
+      gsap.killTweensOf(infoBox);
+      gsap.set(infoBox, { clearProps: 'all' });
+      infoBox.classList.add('hidden');
+    }
+    /* ---------- Возврат вида формы — когда окно уже скрыто (иначе форма «мигнёт» при закрытии) ---------- */
+    function restoreView() {
+      if (autoCloseCall) autoCloseCall.kill();
+      gsap.killTweensOf([form, success]);
+      gsap.set([form, success], { clearProps: 'all' });
+      form.classList.remove('hidden');
+      success.classList.add('hidden');
+      hideError();
+      setSending(false);
+    }
+
+    const tl = gsap.timeline({ paused: true,
+      onReverseComplete: () => { modal.style.visibility = 'hidden'; unlockScroll(); restoreView(); } })
+      .set(modal, { visibility: 'visible' })
+      .fromTo(panel, { clipPath: 'inset(0 0 0 100%)', filter: 'blur(20px)' },
+                     { clipPath: 'inset(0 0 0 0%)',   filter: 'blur(0px)', duration: .9, ease: 'expo.inOut' })
+      .fromTo(bar,   { xPercent: -100 }, { xPercent: 0, duration: .6, ease: 'power3.out' }, '-=.5')
+      .fromTo(closeBtn, { scale: 0, rotate: -90 }, { scale: 1, rotate: 0, duration: .6, ease: 'back.out(1.7)' }, '-=.3')
+      .fromTo(items, { y: 50, opacity: 0, filter: 'blur(8px)' },
+                     { y: 0, opacity: 1, filter: 'blur(0px)', duration: .8, ease: 'power3.out', stagger: .08 }, '-=.5');
+
+    function open(e) {
+      if (e) e.preventDefault();
+      if (isOpen) return;
+      isOpen = true; lockScroll();
+      restoreView();                                  // на случай повторного открытия во время закрытия
+      gsap.killTweensOf(content); gsap.set(content, { opacity: 1 });
+      tl.timeScale(1).play();
+      gsap.delayedCall(1.1, () => isOpen && !form.classList.contains('hidden') && form.elements.name.focus({ preventScroll: true }));
+    }
+    function close() {
+      if (!isOpen) return;
+      isOpen = false;
+      resetForm();                                    // 1) МГНОВЕННО: form.reset() + serviceInfo.hidden
+      gsap.to(content, { opacity: 0, duration: .3, ease: 'power2.in', overwrite: 'auto' });   // 2) контент гаснет
+      tl.timeScale(1.6).reverse();                    // 3) закрытие панели
+    }
+
+    document.querySelectorAll('[data-open-modal]').forEach(b => b.addEventListener('click', open));
+    closeBtn.addEventListener('click', e => { e.stopPropagation(); close(); });
+    document.getElementById('successClose').addEventListener('click', close);
+    addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    content.addEventListener('click', e => { if (e.target === e.currentTarget) close(); });
+
+    /* Валидация. Зарегистрирована РАНЬШЕ блока отправки (fetch) внизу страницы:
+       при ошибке останавливаем событие — запрос на сервер не уходит. */
+    form.addEventListener('submit', e => {
+      const missing = [...form.elements].filter(f => f.required && !f.value.trim());
+      const phone = form.elements.phone;
+      if (phone.value && phone.value.replace(/\D/g, '').length !== 11 && !missing.includes(phone)) missing.push(phone);
+      if (!missing.length) return;                    // всё ок — дальше работает fetch-блок
+      e.preventDefault(); e.stopImmediatePropagation();
+      gsap.fromTo(missing.map(f => f.closest('label')), { x: -8 }, { x: 0, duration: .6, ease: 'elastic.out(1,.3)' });
+      const first = missing.find(f => !f.disabled);
+      if (first) first.focus();
+    });
+
+    return { close, setSending, showError, hideError, showSuccess };
+  })();
+
+  /* ============================================================
+     МОДУЛЬ: Booking — цена, длительность, дата, слоты с сервера
+     ============================================================ */
+  const Booking = (() => {
+    const API = 'http://127.0.0.1:8000';
+    const form      = document.getElementById('bookForm');
+    const service   = form.elements.service;
+    const dateEl    = form.elements.date;
+    const timeEl    = form.elements.time;
+    const priceIn   = form.elements.price;      // скрытые поля для сервера
+    const durIn     = form.elements.duration;
+    const info      = document.getElementById('serviceInfo');
+    const infoPrice = document.getElementById('infoPrice');
+    const infoDur   = document.getElementById('infoDuration');
+    const infoNote  = document.getElementById('infoNote');
+
+    const pad   = n => String(n).padStart(2, '0');
+    const toISO = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;   // локальная дата
+
+    // --- Дата: нельзя выбрать прошедшие дни ---
+    const setMinDate = () => { dateEl.min = toISO(new Date()); };
+    setMinDate();
+    dateEl.addEventListener('focus', setMinDate);
+
+    // --- Блок с ценой и длительностью ---
+    function updateInfo() {
+      const opt = service.selectedOptions[0];
+      if (!opt || !opt.value) {
+        info.classList.add('hidden');
+        priceIn.value = durIn.value = '';
+        return;
+      }
+      const price = Number(opt.dataset.price), dur = Number(opt.dataset.duration);
+      infoPrice.textContent = price.toLocaleString('ru-RU') + ' ₽';
+      infoDur.textContent   = dur + ' мин';
+      priceIn.value = price; durIn.value = dur;
+
+      const evening = opt.dataset.type === 'evening';
+      infoNote.textContent = evening ? 'Эта услуга доступна только вечером.' : '';
+      infoNote.classList.toggle('hidden', !evening);
+
+      info.classList.remove('hidden');
+      gsap.fromTo(info, { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: .5, ease: 'power3.out', overwrite: true });
+    }
+
+    // --- Слоты времени: GET /api/available_times?date=...&type=... ---
+    const setOptions = (list, disabled) => {
+      timeEl.innerHTML = list.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+      timeEl.disabled = disabled;
+    };
+    let reqId = 0;                                   // защита от «устаревших» ответов
+    async function updateAvailableTimes() {
+      const id = ++reqId;
+      const opt = service.selectedOptions[0];
+      const date = dateEl.value;
+      if (!opt || !opt.value) { setOptions([['', 'Выберите услугу']], true); return; }
+      if (!date)              { setOptions([['', 'Выберите дату']], true);   return; }
+
+      setOptions([['', 'Загрузка...']], true);
+      try {
+        const type = opt.dataset.type || 'standard';
+        const res = await fetch(`${API}/api/available_times?date=${encodeURIComponent(date)}&type=${encodeURIComponent(type)}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();               // { "available_times": ["10:00", "11:00", ...] }
+        if (id !== reqId) return;                    // пользователь уже выбрал другое
+
+        let times = Array.isArray(data.available_times) ? [...data.available_times] : [];
+
+        // Если выбрано «сегодня» — убираем время, которое уже прошло (по локальному времени)
+        const now = new Date();
+        if (date === toISO(now)) {
+          const nowMin = now.getHours() * 60 + now.getMinutes();
+          times = times.filter(t => { const [h, m] = t.split(':').map(Number); return h * 60 + m > nowMin; });
+        }
+
+        if (!times.length) { setOptions([['', 'Нет свободных окон']], true); return; }
+        setOptions([['', 'Выберите время'], ...times.map(t => [t, t])], false);
+        gsap.fromTo(timeEl, { opacity: .3 }, { opacity: 1, duration: .4 });
+      } catch (err) {
+        if (id !== reqId) return;
+        console.error('Ошибка загрузки времени:', err);
+        setOptions([['', 'Сервер недоступен']], true);
+      }
+    }
+
+    service.addEventListener('change', () => { updateInfo(); updateAvailableTimes(); });
+    dateEl.addEventListener('change', () => {
+      if (dateEl.value && dateEl.min && dateEl.value < dateEl.min) dateEl.value = '';
+      updateAvailableTimes();
+    });
+    // reset срабатывает ДО очистки значений — синхронизируем интерфейс чуть позже
+    form.addEventListener('reset', () => setTimeout(() => { updateInfo(); updateAvailableTimes(); }, 0));
+
+    updateAvailableTimes();   // начальное состояние: время заблокировано
+  })();
+
+  /* ============================================================
+     МОДУЛЬ: PhoneMask — строго +7 (XXX) XXX-XX-XX
+     ============================================================ */
+  const PhoneMask = (() => {
+    const input = document.getElementById('bookForm').elements.phone;
+
+    // Оставляем только цифры, убираем ведущую 7/8 (код страны), максимум 10 цифр
+    const normalize = v => {
+      let d = v.replace(/\D/g, '');
+      if (d[0] === '7' || d[0] === '8') d = d.slice(1);
+      return d.slice(0, 10);
+    };
+    const format = d => {
+      let out = '+7 (' + d.slice(0, 3);
+      if (d.length >= 3) out += ')';
+      if (d.length > 3)  out += ' ' + d.slice(3, 6);
+      if (d.length > 6)  out += '-' + d.slice(6, 8);
+      if (d.length > 8)  out += '-' + d.slice(8, 10);
+      return out;
+    };
+    const caretToEnd = () => { const n = input.value.length; input.setSelectionRange(n, n); };
+
+    let prev = '';
+    input.addEventListener('beforeinput', () => { prev = normalize(input.value); });
+    input.addEventListener('input', e => {
+      let d = normalize(input.value);
+      // Backspace по символу маски (скобка, пробел, дефис) должен удалять цифру, а не «залипать»
+      if (e.inputType && e.inputType.startsWith('delete') && d === prev) d = d.slice(0, -1);
+      input.value = d ? format(d) : '';
+      caretToEnd();
+    });
+    input.addEventListener('focus', () => {
+      if (!input.value) input.value = '+7 (';
+      setTimeout(caretToEnd, 0);
+    });
+    input.addEventListener('blur', () => { if (!normalize(input.value)) input.value = ''; });
+  })();
+
+  /* ============================================================
+     МОДУЛЬ: Magnetic — притяжение кнопок к курсору
+     ============================================================ */
+  const Magnetic = (() => {
+    if (isTouch) return;
+    document.querySelectorAll('.magnetic').forEach(btn => {
+      const strength = .35;
+      const label = btn.querySelector('span');
+      btn.addEventListener('mousemove', e => {
+        const r = btn.getBoundingClientRect();
+        const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+        gsap.to(btn, { x: dx * strength, y: dy * strength, duration: .4, ease: 'power3.out' });
+        if (label) gsap.to(label, { x: dx * strength * .4, y: dy * strength * .4, duration: .4, ease: 'power3.out' });
+      });
+      btn.addEventListener('mouseleave', () => {
+        gsap.to([btn, label].filter(Boolean), { x: 0, y: 0, duration: 1, ease: 'elastic.out(1,.35)' });
+      });
+    });
+  })();
+  </script>
+
+  <!-- ============================================================
+       ОТПРАВКА НА СЕРВЕР (Python / FastAPI → Телеграм)
+       ============================================================ -->
+  <script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Находим форму в модальном окне
+    const form = document.querySelector('form');
+
+    if (form) {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Блокируем стандартную перезагрузку страницы
+
+            // Анти-спам: пока запрос идёт (или заявка отправлена), повторные отправки игнорируем
+            if (form.dataset.sending === '1') return;
+            Modal.hideError();
+            const formData = new FormData(form);
+            Modal.setSending(true);                 // кнопка disabled + «Отправка...»
+
+            try {
+                // Отправляем данные на наш Python-сервер
+                const response = await fetch('https://bezpontovkrd.onrender.com/api/book', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    Modal.showSuccess();            // красивый экран успеха вместо alert
+                } else {
+                    Modal.setSending(false);
+                    Modal.showError('Ошибка при отправке данных на сервер. Попробуйте ещё раз.');
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+                Modal.setSending(false);
+                Modal.showError('Сервер недоступен. Проверьте, запущен ли uvicorn в терминале.');
+            }
+        });
+    }
+});
+  </script>
+</body>
+</html>
